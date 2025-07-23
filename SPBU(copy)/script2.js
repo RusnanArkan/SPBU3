@@ -2,18 +2,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const jenisBBMSelect = document.getElementById('jenisBBM');
     const hargaJualSekarangInput = document.getElementById('hargaJualSekarang');
     const literTerjualInput = document.getElementById('literTerjual');
+    const tanggalInput = document.getElementById('tanggalInput');
     const hitungBtn = document.getElementById('hitungBtn');
     const exportExcelBtn = document.getElementById('exportExcelBtn');
     const clearAllDataBtn = document.getElementById('clearAllDataBtn');
-    const riwayatTableBody = document.querySelector('#riwayatTable tbody');
+    const separatedBBMReportsDiv = document.getElementById('separatedBBMReports');
 
     let riwayatPenjualan = JSON.parse(localStorage.getItem('riwayatPenjualan')) || [];
-    renderRiwayatTable();
+    let lastHargaPerJenis = JSON.parse(localStorage.getItem('lastHargaPerJenis')) || {};
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    tanggalInput.value = `${year}-${month}-${day}`;
+
+    renderSeparatedBBMReports();
+    updateHargaJualSekarangBasedOnSelection();
+
+    jenisBBMSelect.addEventListener('change', updateHargaJualSekarangBasedOnSelection);
+
+    function updateHargaJualSekarangBasedOnSelection() {
+        const selectedJenisBBM = jenisBBMSelect.value;
+        if (lastHargaPerJenis[selectedJenisBBM]) {
+            hargaJualSekarangInput.value = lastHargaPerJenis[selectedJenisBBM];
+        } else {
+            hargaJualSekarangInput.value = '';
+        }
+    }
 
     hitungBtn.addEventListener('click', () => {
         const jenisBBM = jenisBBMSelect.value;
         const hargaJualSekarang = parseFloat(hargaJualSekarangInput.value);
         const literTerjual = parseFloat(literTerjualInput.value);
+        const tanggalManual = tanggalInput.value;
 
         if (isNaN(hargaJualSekarang) || isNaN(literTerjual) || hargaJualSekarang <= 0 || literTerjual <= 0) {
             alert('Mohon masukkan angka yang valid dan lebih besar dari nol untuk harga jual dan liter terjual.');
@@ -21,15 +43,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const nilaiJual = hargaJualSekarang * literTerjual;
-        
-        const timestamp = new Date().toLocaleString('id-ID', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
+
+        let displayDate;
+        if (tanggalManual) {
+            const [yearManual, monthManual, dayManual] = tanggalManual.split('-');
+            displayDate = `${dayManual}/${monthManual}/${yearManual}`;
+        } else {
+            const now = new Date();
+            displayDate = now.toLocaleString('id-ID', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        }
 
         const newEntry = {
-            waktu: timestamp,
+            waktu: displayDate,
             jenisBBM: jenisBBM,
             hargaJual: hargaJualSekarang,
             literTerjual: literTerjual,
@@ -38,9 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         riwayatPenjualan.push(newEntry);
         localStorage.setItem('riwayatPenjualan', JSON.stringify(riwayatPenjualan));
-        renderRiwayatTable();
 
-        hargaJualSekarangInput.value = '';
+        lastHargaPerJenis[jenisBBM] = hargaJualSekarang;
+        localStorage.setItem('lastHargaPerJenis', JSON.stringify(lastHargaPerJenis));
+
+        renderSeparatedBBMReports();
+
         literTerjualInput.value = '';
     });
 
@@ -56,70 +88,109 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const dataForExport = [
-            ["No.", "Waktu", "Jenis BBM", "Harga Jual (per Liter)", "Liter Terjual", "Nilai Jual"]
-        ];
+        const uniqueJenisBBM = [...new Set(riwayatPenjualan.map(item => item.jenisBBM))].sort();
 
-        const sortedRiwayat = [...riwayatPenjualan].sort((a, b) => new Date(a.waktu.split('/').reverse().join('-')) - new Date(b.waktu.split('/').reverse().join('-')));
+        const wb = XLSX.utils.book_new();
 
-        let currentGroupNumber = 0;
-        let lastDate = null;
+        uniqueJenisBBM.forEach(jenisBBM => {
+            // **Perubahan di sini:** Tambahkan kembali "Jenis BBM" ke header Excel
+            const dataForSheet = [
+                ["No.", "Waktu", "Jenis BBM", "Harga Jual (per Liter)", "Liter Terjual", "Nilai Jual"]
+            ];
 
-        sortedRiwayat.forEach((item, index) => {
-            if (item.waktu !== lastDate) {
-                currentGroupNumber++;
-                if (index > 0) {
-                    dataForExport.push(["", "", "", "", "", ""]);
+            const filteredData = riwayatPenjualan
+                .filter(item => item.jenisBBM === jenisBBM)
+                .sort((a, b) => {
+                    const [dayA, monthA, yearA] = a.waktu.split('/');
+                    const dateA = new Date(`${monthA}/${dayA}/${yearA}`);
+                    const [dayB, monthB, yearB] = b.waktu.split('/');
+                    const dateB = new Date(`${monthB}/${dayB}/${yearB}`);
+                    return dateA - dateB;
+                });
+
+            let currentGroupNumber = 0;
+            let lastDateForNumbering = null;
+            let lastDateForDisplay = null;
+            let lastNumberForDisplay = null;
+
+            let subtotalLiter = 0;
+            let subtotalNilai = 0;
+
+            filteredData.forEach(item => {
+                if (item.waktu !== lastDateForNumbering) {
+                    currentGroupNumber++;
                 }
-            }
-            lastDate = item.waktu;
 
-            dataForExport.push([
-                currentGroupNumber,
-                index === 0 || item.waktu !== sortedRiwayat[index - 1]?.waktu ? item.waktu : "",
-                item.jenisBBM,
-                item.hargaJual,
-                item.literTerjual,
-                item.nilaiJual
-            ]);
+                let displayWaktu = "";
+                let displayGroupNumber = "";
+
+                if (item.waktu !== lastDateForDisplay) {
+                    displayWaktu = item.waktu;
+                }
+
+                if (currentGroupNumber !== lastNumberForDisplay) {
+                    displayGroupNumber = currentGroupNumber;
+                }
+
+                // **Perubahan di sini:** Tambahkan item.jenisBBM ke dataForSheet
+                dataForSheet.push([
+                    displayGroupNumber,
+                    displayWaktu,
+                    item.jenisBBM, // Menampilkan Jenis BBM di kolom
+                    item.hargaJual,
+                    item.literTerjual,
+                    item.nilaiJual
+                ]);
+
+                subtotalLiter += item.literTerjual;
+                subtotalNilai += item.nilaiJual;
+
+                lastDateForNumbering = item.waktu;
+                lastDateForDisplay = item.waktu;
+                lastNumberForDisplay = currentGroupNumber;
+            });
+
+            // Tambahkan baris subtotal untuk jenis BBM ini
+            // Sesuaikan colSpan untuk subtotal karena kolom "Jenis BBM" kembali
+            dataForSheet.push(["", "", `Subtotal ${jenisBBM}`, "", subtotalLiter, subtotalNilai]);
+
+            const ws = XLSX.utils.aoa_to_sheet(dataForSheet);
+            XLSX.utils.book_append_sheet(wb, ws, jenisBBM);
         });
 
-        // Calculate summaries for export
-        const summary = calculateSummary(riwayatPenjualan);
+        const summaryData = [
+            ["Ringkasan Total Penjualan Keseluruhan", "", "", "", ""],
+            ["Jenis BBM", "Total Liter Terjual", "Total Nilai Jual", "", ""]
+        ];
+        const overallSummary = calculateSummary(riwayatPenjualan);
         const grandTotal = calculateGrandTotal(riwayatPenjualan);
 
-        // Add summary header
-        dataForExport.push(["", "", "", "", "", ""]); // Empty row for separation
-        dataForExport.push(["Ringkasan Total Penjualan per Jenis BBM", "", "", "", "", ""]);
-        dataForExport.push(["Jenis BBM", "Total Liter Terjual", "Total Nilai Jual", "", "", ""]);
-
-        // Add summary data
-        for (const jenis in summary) {
-            dataForExport.push([
+        for (const jenis in overallSummary) {
+            summaryData.push([
                 jenis,
-                summary[jenis].totalLiter,
-                summary[jenis].totalNilai,
-                "", "", ""
+                overallSummary[jenis].totalLiter,
+                overallSummary[jenis].totalNilai,
+                "", ""
             ]);
         }
+        summaryData.push(["", "", "", "", ""]);
+        summaryData.push(["TOTAL KESELURUHAN NILAI JUAL", "", grandTotal, "", ""]);
 
-        // Add grand total
-        dataForExport.push(["", "", "", "", "", ""]); // Empty row for separation
-        dataForExport.push(["Total Keseluruhan Nilai Jual", "", grandTotal, "", "", ""]); // Grand total row in Excel
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan Total");
 
-
-        const ws = XLSX.utils.aoa_to_sheet(dataForExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Riwayat Penjualan BBM");
-
-        XLSX.writeFile(wb, `Buku_Jual_Kontan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        XLSX.writeFile(wb, `Buku_Jual_Kontan_Per_BBM_${new Date().toISOString().slice(0, 10)}.xlsx`);
     });
 
     clearAllDataBtn.addEventListener('click', () => {
         if (confirm('Apakah Anda yakin ingin menghapus semua data penjualan? Tindakan ini tidak dapat dibatalkan.')) {
             localStorage.removeItem('riwayatPenjualan');
+            localStorage.removeItem('lastHargaPerJenis');
             riwayatPenjualan = [];
-            renderRiwayatTable();
+            lastHargaPerJenis = {};
+            renderSeparatedBBMReports();
+            updateHargaJualSekarangBasedOnSelection();
+            tanggalInput.value = `${year}-${month}-${day}`;
             alert('Semua data penjualan telah dihapus.');
         }
     });
@@ -140,97 +211,128 @@ document.addEventListener('DOMContentLoaded', () => {
         return data.reduce((total, entry) => total + entry.nilaiJual, 0);
     }
 
-    function renderRiwayatTable() {
-        riwayatTableBody.innerHTML = '';
-        
-        const sortedRiwayat = [...riwayatPenjualan].sort((a, b) => {
-            const dateA = new Date(a.waktu.split('/').reverse().join('-'));
-            const dateB = new Date(b.waktu.split('/').reverse().join('-'));
-            return dateA - dateB;
+    function renderSeparatedBBMReports() {
+        separatedBBMReportsDiv.innerHTML = '';
+
+        if (riwayatPenjualan.length === 0) {
+            separatedBBMReportsDiv.innerHTML = '<p>Tidak ada data penjualan untuk ditampilkan.</p>';
+            return;
+        }
+
+        const uniqueJenisBBM = [...new Set(riwayatPenjualan.map(item => item.jenisBBM))].sort();
+
+        uniqueJenisBBM.forEach(jenisBBM => {
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'bbm-report-section mb-4';
+
+            const sectionTitle = document.createElement('h4');
+            sectionTitle.textContent = `Riwayat Penjualan ${jenisBBM}`;
+            tableContainer.appendChild(sectionTitle);
+
+            const table = document.createElement('table');
+            table.className = 'table table-bordered table-striped';
+            tableContainer.appendChild(table);
+
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            // Header untuk UI, tanpa "Jenis BBM" karena sudah dipisahkan per tabel
+            ['No.', 'Waktu', 'Harga Jual (per Liter)', 'Liter Terjual', 'Nilai Jual'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+
+            const tbody = table.createTBody();
+
+            const filteredData = riwayatPenjualan
+                .filter(item => item.jenisBBM === jenisBBM)
+                .sort((a, b) => {
+                    const [dayA, monthA, yearA] = a.waktu.split('/');
+                    const dateA = new Date(`${monthA}/${dayA}/${yearA}`);
+                    const [dayB, monthB, yearB] = b.waktu.split('/');
+                    const dateB = new Date(`${monthB}/${dayB}/${yearB}`);
+                    return dateA - dateB;
+                });
+
+            let currentGroupNumberUI = 0;
+            let lastDateForNumberingUI = null;
+            let lastDateForDisplayUI = null;
+            let lastNumberForDisplayUI = null;
+
+            let subtotalLiterUI = 0;
+            let subtotalNilaiUI = 0;
+
+            filteredData.forEach(entry => {
+                if (entry.waktu !== lastDateForNumberingUI) {
+                    currentGroupNumberUI++;
+                }
+
+                const row = tbody.insertRow();
+                let displayWaktu = "";
+                let displayGroupNumber = "";
+
+                if (entry.waktu !== lastDateForDisplayUI) {
+                    displayWaktu = entry.waktu;
+                }
+
+                if (currentGroupNumberUI !== lastNumberForDisplayUI) {
+                    displayGroupNumber = currentGroupNumberUI;
+                }
+
+                row.insertCell().textContent = displayGroupNumber;
+                row.insertCell().textContent = displayWaktu;
+                row.insertCell().textContent = `Rp ${entry.hargaJual.toLocaleString('id-ID')}`;
+                row.insertCell().textContent = `${entry.literTerjual.toLocaleString('id-ID')} L`;
+                row.insertCell().textContent = `Rp ${entry.nilaiJual.toLocaleString('id-ID')}`;
+
+                subtotalLiterUI += entry.literTerjual;
+                subtotalNilaiUI += entry.nilaiJual;
+
+                lastDateForNumberingUI = entry.waktu;
+                lastDateForDisplayUI = entry.waktu;
+                lastNumberForDisplayUI = currentGroupNumberUI;
+            });
+
+            const subtotalRow = tbody.insertRow();
+            subtotalRow.style.backgroundColor = '#e0f7fa';
+            const subtotalLabelCell = subtotalRow.insertCell();
+            subtotalLabelCell.colSpan = 3; // Colspan 3 karena tanpa "Jenis BBM" di UI
+            subtotalLabelCell.textContent = `Subtotal ${jenisBBM}`;
+            subtotalLabelCell.style.textAlign = 'right';
+            subtotalLabelCell.style.fontWeight = 'bold';
+            subtotalRow.insertCell().textContent = `${subtotalLiterUI.toLocaleString('id-ID')} L`;
+            subtotalRow.insertCell().textContent = `Rp ${subtotalNilaiUI.toLocaleString('id-ID')}`;
+
+            separatedBBMReportsDiv.appendChild(tableContainer);
         });
 
-        let currentGroupNumber = 0;
-        let lastDate = null;
+        const summary = calculateSummary(riwayatPenjualan);
+        const grandTotal = calculateGrandTotal(riwayatPenjualan);
 
-        sortedRiwayat.forEach((entry, index) => {
-            const row = riwayatTableBody.insertRow();
-            
-            if (entry.waktu !== lastDate) {
-                currentGroupNumber++;
-                row.insertCell().textContent = currentGroupNumber;
-                row.insertCell().textContent = entry.waktu;
-            } else {
-                row.insertCell().textContent = "";
-                row.insertCell().textContent = "";
-            }
-            
-            lastDate = entry.waktu;
-
-            row.insertCell().textContent = entry.jenisBBM;
-            row.insertCell().textContent = `Rp ${entry.hargaJual.toLocaleString('id-ID')}`;
-            row.insertCell().textContent = `${entry.literTerjual.toLocaleString('id-ID')} L`;
-            row.insertCell().textContent = `Rp ${entry.nilaiJual.toLocaleString('id-ID')}`;
-        });
-
-        // Add summary row(s)
         if (riwayatPenjualan.length > 0) {
-            const summary = calculateSummary(riwayatPenjualan);
-            const grandTotal = calculateGrandTotal(riwayatPenjualan);
+            const summaryContainer = document.createElement('div');
+            summaryContainer.className = 'overall-summary mt-5 p-3 border rounded bg-light';
 
-            // Add a separator row
-            const separatorRow = riwayatTableBody.insertRow();
-            const separatorCell = separatorRow.insertCell();
-            separatorCell.colSpan = 6;
-            separatorCell.style.height = '20px';
-            separatorCell.style.backgroundColor = '#f0f0f0';
+            const summaryHeader = document.createElement('h5');
+            summaryHeader.textContent = 'Ringkasan Total Penjualan Keseluruhan';
+            summaryContainer.appendChild(summaryHeader);
 
-            // Add summary header row
-            const summaryHeaderRow = riwayatTableBody.insertRow();
-            const summaryHeaderCell = summaryHeaderRow.insertCell();
-            summaryHeaderCell.colSpan = 6;
-            summaryHeaderCell.innerHTML = '<strong>Ringkasan Total Penjualan per Jenis BBM</strong>';
-            summaryHeaderCell.style.textAlign = 'center';
-            summaryHeaderCell.style.fontWeight = 'bold';
-            summaryHeaderCell.style.padding = '10px';
-            summaryHeaderCell.style.backgroundColor = '#e9ecef';
-
-            // Add table header for summary
-            const summaryTableHeaders = riwayatTableBody.insertRow();
-            summaryTableHeaders.insertCell().textContent = "Jenis BBM";
-            summaryTableHeaders.insertCell().textContent = "Total Liter Terjual";
-            summaryTableHeaders.insertCell().textContent = "Total Nilai Jual";
-            summaryTableHeaders.insertCell().textContent = ""; // empty cell
-            summaryTableHeaders.insertCell().textContent = ""; // empty cell
-            summaryTableHeaders.insertCell().textContent = ""; // empty cell
-            summaryTableHeaders.style.fontWeight = 'bold';
-            summaryTableHeaders.style.backgroundColor = '#f8f9fa';
-
+            const summaryList = document.createElement('ul');
+            summaryList.className = 'list-unstyled';
             for (const jenis in summary) {
-                const summaryRow = riwayatTableBody.insertRow();
-                summaryRow.insertCell().textContent = jenis;
-                summaryRow.insertCell().textContent = `${summary[jenis].totalLiter.toLocaleString('id-ID')} L`;
-                summaryRow.insertCell().textContent = `Rp ${summary[jenis].totalNilai.toLocaleString('id-ID')}`;
-                summaryRow.insertCell().textContent = ""; // empty cell
-                summaryRow.insertCell().textContent = ""; // empty cell
-                summaryRow.insertCell().textContent = ""; // empty cell
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${jenis}:</strong> ${summary[jenis].totalLiter.toLocaleString('id-ID')} L / Rp ${summary[jenis].totalNilai.toLocaleString('id-ID')}`;
+                summaryList.appendChild(li);
             }
+            summaryContainer.appendChild(summaryList);
 
-            // Add Grand Total row
-            const grandTotalRow = riwayatTableBody.insertRow();
-            const grandTotalLabelCell = grandTotalRow.insertCell();
-            grandTotalLabelCell.colSpan = 5; // Span across first 5 columns
-            grandTotalLabelCell.textContent = "TOTAL KESELURUHAN NILAI JUAL";
-            grandTotalLabelCell.style.textAlign = 'right';
-            grandTotalLabelCell.style.fontWeight = 'bold';
-            grandTotalLabelCell.style.padding = '8px';
-            grandTotalLabelCell.style.backgroundColor = '#d1e7dd'; // Light green background
+            const grandTotalParagraph = document.createElement('p');
+            grandTotalParagraph.innerHTML = `<strong>TOTAL KESELURUHAN NILAI JUAL: Rp ${grandTotal.toLocaleString('id-ID')}</strong>`;
+            grandTotalParagraph.style.fontSize = '1.2em';
+            grandTotalParagraph.style.marginTop = '15px';
+            summaryContainer.appendChild(grandTotalParagraph);
 
-            const grandTotalValueCell = grandTotalRow.insertCell();
-            grandTotalValueCell.textContent = `Rp ${grandTotal.toLocaleString('id-ID')}`;
-            grandTotalValueCell.style.fontWeight = 'bold';
-            grandTotalValueCell.style.backgroundColor = '#d1e7dd';
-            grandTotalValueCell.style.padding = '8px';
-            grandTotalValueCell.style.textAlign = 'right';
+            separatedBBMReportsDiv.appendChild(summaryContainer);
         }
     }
 
