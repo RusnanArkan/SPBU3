@@ -39,38 +39,59 @@
             </select>
         </div>
 
+         <div id="unitPriceInputs">
+            <h3>Harga Satuan BBM</h3>
+            <div id="hargaSatuanSolarDiv">
+                <label for="hargaSatuanInputSolar">Solar:</label>
+                <input type="number" id="hargaSatuanInputSolar" placeholder="Harga Satuan Solar" step="0.01">
+            </div>
+            <div id="hargaSatuanPertaliteDiv">
+                <label for="hargaSatuanInputPertalite">Pertalite:</label>
+                <input type="number" id="hargaSatuanInputPertalite" placeholder="Harga Satuan Pertalite" step="0.01">
+            </div>
+            <div id="hargaSatuanPertamaxDiv">
+                <label for="hargaSatuanInputPertamax">Pertamax:</label>
+                <input type="number" id="hargaSatuanInputPertamax" placeholder="Harga Satuan Pertamax" step="0.01">
+            </div>
+            <div id="hargaSatuanPertaminadexDiv">
+                <label for="hargaSatuanInputPertaminadex">Pertamina Dex:</label>
+                <input type="number" id="hargaSatuanInputPertaminadex" placeholder="Harga Satuan Pertamina Dex" step="0.01">
+            </div>
+        </div>
+
         <div class="input-section">
             <h2>Input Data</h2>
             <div class="input-group">
                 <h3>Saldo Awal</h3>
+                <label for="entryDate">Tanggal Saldo Awal:</label>
+                <input type="date" id="entryDate" class="form-control" />
                 <label for="initialLiter">Liter:</label>
                 <input type="number" id="initialLiter" placeholder="Jumlah Liter">
                 <label for="initialRupiah">Rupiah:</label>
                 <input type="number" id="initialRupiah" placeholder="Jumlah Rupiah">
-                <label for="initialHargaSatuan">Harga Satuan:</label>
-                <input type="number" id="initialHargaSatuan" placeholder="Harga Satuan">
+
                 <button onclick="addInitialBalance()">Tambah Saldo Awal</button>
             </div>
 
             <div class="input-group">
                 <h3>Terima (Pengambilan)</h3>
+                <label for="receiveDate">Tanggal Terima:</label>
+                <input type="date" id="receiveDate" class="form-control" />
                 <label for="receiveLiter">Liter:</label>
                 <input type="number" id="receiveLiter" placeholder="Jumlah Liter">
                 <label for="receiveRupiah">Rupiah:</label>
                 <input type="number" id="receiveRupiah" placeholder="Jumlah Rupiah">
-                <label for="receiveHargaSatuan">Harga Satuan:</label>
-                <input type="number" id="receiveHargaSatuan" placeholder="Harga Satuan">
                 <button onclick="addReceiveEntry()">Tambah Data Terima</button>
             </div>
 
             <div class="input-group">
                 <h3>Setoran</h3>
+                <label for="setDate">Tanggal Setoran:</label>
+                <input type="date" id="setDate" class="form-control" />
                 <label for="setorLiter">Liter:</label>
                 <input type="number" id="setorLiter" placeholder="Jumlah Liter">
                 <label for="setorRupiah">Rupiah:</label>
                 <input type="number" id="setorRupiah" placeholder="Jumlah Rupiah">
-                <label for="setorHargaSatuan">Harga Satuan:</label>
-                <input type="number" id="setorHargaSatuan" placeholder="Harga Satuan">
                 <button onclick="addSetorEntry()">Tambah Data Setoran</button>
             </div>
         </div>
