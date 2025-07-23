@@ -127,6 +127,18 @@ h1, h2 {
     color: #555;
 }
 
+.mb-3 {
+    display: flex;
+    flex-direction: column;
+}
+
+.mb-3 label {
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #555;
+}
+
+
 .input-group input[type="text"],
 .input-group input[type="number"],
 .input-group select {
