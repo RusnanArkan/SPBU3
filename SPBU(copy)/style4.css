@@ -116,6 +116,32 @@ h1, h2, h3 {
     margin-bottom: 20px;
 }
 
+/* Styles for the separate unit price inputs */
+        #unitPriceInputs {
+            position: absolute;
+            right: 20px; /* Adjust as needed */
+            top: 150px; /* Adjust as needed to position it correctly */
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            width: 200px; /* Adjust width as needed */
+        }
+        #unitPriceInputs label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        #unitPriceInputs input[type="number"] {
+            width: calc(100% - 10px);
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+
 .input-section {
     display: flex;
     justify-content: space-around;
