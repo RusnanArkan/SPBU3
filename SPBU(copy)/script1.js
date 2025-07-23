@@ -28,23 +28,23 @@ class BBM {
         localStorage.setItem(`bbm_${this.nama}`, JSON.stringify(dataToSave));
     }
 
-    setInputStokAwal(jumlah) {
+    setInputStokAwal(jumlah, tanggalManual = null) {
         if (jumlah >= 0) {
             this.stokAwal = jumlah;
             this.stokSaatIni = jumlah;
             this.riwayatPenggunaan = [];
             this.lastMeterReading = null;
-            this.tambahRiwayat('Input Stok Awal', 'Input Stok Awal', jumlah, this.stokSaatIni, `Stok Awal: ${jumlah} Liter`, null, null, null);
+            this.tambahRiwayat('Input Stok Awal', 'Input Stok Awal', jumlah, this.stokSaatIni, `Stok Awal: ${jumlah} Liter`, null, null, tanggalManual);
             this.save();
             return true;
         }
         return false;
     }
 
-    tambahStok(jumlah) {
+    tambahStok(jumlah, tanggalManual = null) {
         if (jumlah > 0) {
             this.stokSaatIni += jumlah;
-            this.tambahRiwayat('Tambah Stok', 'Penambahan', jumlah, this.stokSaatIni, `${jumlah} Liter`, null, null, null);
+            this.tambahRiwayat('Tambah Stok', 'Penambahan', jumlah, this.stokSaatIni, `${jumlah} Liter`, null, null, tanggalManual);
             this.save();
             return true;
         }
@@ -52,7 +52,7 @@ class BBM {
     }
 
     // MODIFIKASI: Method kurangiStok tidak lagi memeriksa ketersediaan stok
-    kurangiStok(jumlah, tipePenggunaan, deskripsiTampilan) {
+    kurangiStok(jumlah, tipePenggunaan, deskripsiTampilan, tanggalManual = null) {
         if (jumlah > 0) {
             if (this.lastMeterReading === null) {
                 // Ini seharusnya dihandle di kurangiStokHandler sebelum memanggil ini
@@ -65,7 +65,7 @@ class BBM {
             const meterAkhir = meterAwal + jumlah;
 
             this.stokSaatIni -= jumlah; // Stok akan berkurang meskipun menjadi negatif
-            this.tambahRiwayat('Penggunaan', tipePenggunaan, jumlah, this.stokSaatIni, deskripsiTampilan, meterAwal, meterAkhir);
+            this.tambahRiwayat('Penggunaan', tipePenggunaan, jumlah, this.stokSaatIni, deskripsiTampilan, meterAwal, meterAkhir, tanggalManual);
             this.lastMeterReading = meterAkhir;
             this.save();
             return true;
@@ -77,12 +77,25 @@ class BBM {
         return this.stokSaatIni;
     }
 
-    tambahRiwayat(tipeTransaksi, tipePenggunaan, jumlahLiter, stokSetelah, deskripsiTampilan = '', meterAwal = null, meterAkhir = null) {
-        const now = new Date();
-        const tanggal = now.toLocaleDateString('id-ID');
+    // MODIFIKASI: Menambahkan parameter tanggalManual
+    tambahRiwayat(tipeTransaksi, tipePenggunaan, jumlahLiter, stokSetelah, deskripsiTampilan = '', meterAwal = null, meterAkhir = null, tanggalManual = null) {
+        let tanggal;
+        if (tanggalManual) {
+            // Jika tanggalManual disediakan (dari input type="date"), itu akan dalam format YYYY-MM-DD
+            // Kita perlu mengubahnya ke DD/MM/YYYY
+            const [year, month, day] = tanggalManual.split('-');
+            tanggal = `${day}/${month}/${year}`;
+        } else {
+            // Jika tidak ada tanggal manual, gunakan tanggal saat ini
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            tanggal = `${day}/${month}/${year}`;
+        }
 
         this.riwayatPenggunaan.push({
-            tanggal: tanggal,
+            tanggal: tanggal, // Tanggal akan disimpan dalam format DD/MM/YYYY
             tipeTransaksi: tipeTransaksi,
             tipePenggunaan: tipePenggunaan,
             jumlah: jumlahLiter,
@@ -125,12 +138,18 @@ function renderBBMSections() {
                 <h4>Manajemen Stok</h4>
                 <label for="stok-awal-${type}">Input Stok Awal (Liter):</label>
                 <input type="number" id="stok-awal-${type}" value="${bbm.stokAwal}" min="0">
+                <br>
+                <label for="tanggal-stok-awal-${type}">Tanggal Stok Awal:</label>
+                <input type="date" id="tanggal-stok-awal-${type}">
                 <button onclick="setInputStok('${type}')">Set Stok Awal</button>
 
                 <br><br>
 
                 <label for="tambah-stok-${type}">Tambah Stok (Liter):</label>
                 <input type="number" id="tambah-stok-${type}" min="0">
+                <br>
+                <label for="tanggal-tambah-stok-${type}">Tanggal Tambah Stok:</label>
+                <input type="date" id="tanggal-tambah-stok-${type}">
                 <button onclick="tambahStokHandler('${type}')">Tambah Stok</button>
             </div>
 
@@ -146,6 +165,9 @@ function renderBBMSections() {
                     <option value="Pakai Pribadi">Pakai Pribadi</option>
                     <option value="Pakai Polisi">Pakai Polisi</option>
                 </select>
+                <br>
+                <label for="tanggal-penggunaan-${type}">Tanggal Penggunaan:</label>
+                <input type="date" id="tanggal-penggunaan-${type}">
 
                 <div id="meter-inputs-${type}" style="display: block;">
                     <p>Meter Awal Terakhir: <span id="last-meter-${type}">${bbm.lastMeterReading !== null ? bbm.lastMeterReading : 'Belum Ada'}</span></p>
@@ -164,7 +186,9 @@ function renderBBMSections() {
 
 function tambahStokHandler(type) {
     const inputElement = document.getElementById(`tambah-stok-${type}`);
+    const tanggalInputElement = document.getElementById(`tanggal-tambah-stok-${type}`);
     const jumlah = parseFloat(inputElement.value);
+    const tanggalManual = tanggalInputElement.value; // Ambil nilai tanggal
     const bbm = bbmInstances[type];
 
     if (isNaN(jumlah) || jumlah <= 0) {
@@ -172,9 +196,10 @@ function tambahStokHandler(type) {
         return;
     }
 
-    if (bbm.tambahStok(jumlah)) {
+    if (bbm.tambahStok(jumlah, tanggalManual)) { // Teruskan tanggalManual
         document.getElementById(`sisa-stok-${type}`).textContent = bbm.getSisaStok();
         inputElement.value = '';
+        tanggalInputElement.value = ''; // Kosongkan input tanggal
         renderRiwayat();
         alert(`Stok ${type} berhasil ditambahkan sebanyak ${jumlah} Liter. Sisa: ${bbm.getSisaStok()} Liter.`);
     } else {
@@ -185,11 +210,14 @@ function tambahStokHandler(type) {
 
 function setInputStok(type) {
     const inputElement = document.getElementById(`stok-awal-${type}`);
+    const tanggalInputElement = document.getElementById(`tanggal-stok-awal-${type}`);
     const jumlah = parseFloat(inputElement.value);
+    const tanggalManual = tanggalInputElement.value; // Ambil nilai tanggal
     const bbm = bbmInstances[type];
-    if (bbm.setInputStokAwal(jumlah)) {
+    if (bbm.setInputStokAwal(jumlah, tanggalManual)) { // Teruskan tanggalManual
         document.getElementById(`sisa-stok-${type}`).textContent = bbm.getSisaStok();
         inputElement.value = bbm.stokAwal;
+        tanggalInputElement.value = ''; // Kosongkan input tanggal
         renderBBMSections();
         renderRiwayat();
         alert(`Stok awal ${type} berhasil diatur ke ${jumlah} Liter. Meter akan direset.`);
@@ -202,9 +230,11 @@ function kurangiStokHandler(type) {
     const inputPenggunaan = document.getElementById(`penggunaan-${type}`);
     const selectTipePenggunaan = document.getElementById(`tipe-penggunaan-${type}`);
     const initialMeterInput = document.getElementById(`initial-meter-${type}`);
+    const tanggalInputElement = document.getElementById(`tanggal-penggunaan-${type}`); // Ambil input tanggal
 
     const inputPenggunaanText = inputPenggunaan.value.trim();
     const tipePenggunaan = selectTipePenggunaan.value;
+    const tanggalManual = tanggalInputElement.value; // Ambil nilai tanggal
 
     const bbm = bbmInstances[type];
 
@@ -231,10 +261,11 @@ function kurangiStokHandler(type) {
     // MODIFIKASI: Hapus pengecekan if (bbm.stokSaatIni < jumlahLiterUntukStok)
     // Sekarang, kurangiStok akan selalu berhasil jika jumlah > 0, bahkan jika stok menjadi negatif.
     
-    if (bbm.kurangiStok(jumlahLiterUntukStok, tipePenggunaan, inputPenggunaanText)) {
+    if (bbm.kurangiStok(jumlahLiterUntukStok, tipePenggunaan, inputPenggunaanText, tanggalManual)) { // Teruskan tanggalManual
         document.getElementById(`sisa-stok-${type}`).textContent = bbm.getSisaStok();
         inputPenggunaan.value = '';
         selectTipePenggunaan.value = 'Penjualan Kontan';
+        tanggalInputElement.value = ''; // Kosongkan input tanggal
         renderBBMSections();
         renderRiwayat();
         alert(`Penggunaan ${type} sebanyak ${jumlahLiterUntukStok} Liter (${tipePenggunaan}). Sisa: ${bbm.getSisaStok()} Liter.`);
