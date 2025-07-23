@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ... (existing variable declarations) ...
     const initialBalanceInput = document.getElementById('initialBalance');
     const setBalanceBtn = document.getElementById('setBalanceBtn');
     const descriptionInput = document.getElementById('description');
@@ -20,20 +21,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailTransactionTableBody = document.getElementById('detailTransactionTableBody');
     const detailAccountSearchInput = document.getElementById('detailAccountSearch');
 
-    // HAPUS: Referensi untuk pemilih sumber akun
-    // const accountSourceSelector = document.getElementById('accountSourceSelector');
-
     // Tambahan elemen untuk tombol Export Excel
     const exportMainTableBtn = document.getElementById('exportMainTableBtn');
     const exportRecapTableBtn = document.getElementById('exportRecapTableBtn');
     const exportDetailTableBtn = document.getElementById('exportDetailTableBtn');
 
+    // NEW: Date input element
+    const transactionDateInput = document.getElementById('transactionDate'); // Make sure this ID matches your HTML
+
     let initialStartingBalance = 0;
     let transactions = [];
-    let accounts = []; // Ini akan menampung daftar akun yang sedang aktif
+    let accounts = [];
 
-    // --- Definisi Sumber Data Akun Tunggal ---
-    // defaultAccountsSourceA sekarang menjadi satu-satunya sumber
     const defaultAccounts = [
         { code: '111000', name: 'Kas' },
         { code: '112001', name: 'Bank Mandiri' },
@@ -99,11 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { code: '529300', name: 'Biaya Pph 21/25/29' },
     ];
 
-    // Variabel untuk menyimpan kunci local storage aktif untuk data akun
-    // Kunci local storage kini statis karena tidak ada perpindahan sumber
     const accountStorageKey = 'accountsData_kaskecil';
 
-    // --- Fungsi Local Storage (Disederhanakan) ---
     function saveToLocalStorage() {
         localStorage.setItem('initialStartingBalance_kaskecil', JSON.stringify(initialStartingBalance));
         localStorage.setItem('transactions_kaskecil', JSON.stringify(transactions));
@@ -121,6 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (savedTransactions !== null) {
             transactions = JSON.parse(savedTransactions);
+            // NEW: Ensure transactions have a 'date' property. If not, set it to today's date.
+            transactions.forEach(t => {
+                if (!t.date) {
+                    t.date = new Date().toLocaleDateString('id-ID');
+                }
+            });
         }
 
         if (savedAccountsData !== null) {
@@ -130,22 +132,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     accounts = parsedAccounts;
                 } else {
                     console.warn(`Data 'accountsData' di Local Storage (Kas Kecil) tidak valid atau kosong. Menggunakan default accounts.`);
-                    accounts = [...defaultAccounts]; // Menggunakan defaultAccounts langsung
+                    accounts = [...defaultAccounts];
                     saveToLocalStorage();
                 }
             } catch (e) {
                 console.error(`Error parsing 'accountsData' (Kas Kecil) from Local Storage:`, e);
-                accounts = [...defaultAccounts]; // Menggunakan defaultAccounts langsung
+                accounts = [...defaultAccounts];
                 saveToLocalStorage();
             }
         } else {
-            accounts = [...defaultAccounts]; // Menggunakan defaultAccounts langsung
+            accounts = [...defaultAccounts];
             saveToLocalStorage();
         }
         console.log(`Data loaded from Local Storage for Kas Kecil.`);
     }
 
-    // --- Fungsi Inisialisasi Akun ke Selects ---
     function loadAccountsToSelects(mainFilter = '', detailFilter = '') {
         accountSelect.innerHTML = '';
         const filteredMainAccounts = accounts.filter((account) => account.name.toLowerCase().includes(mainFilter.toLowerCase()) || account.code.toLowerCase().includes(mainFilter.toLowerCase()));
@@ -185,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Fungsi Export ke Excel ---
     function exportTableToExcel(tableID, filename = '') {
         const table = document.getElementById(tableID);
         if (!table) {
@@ -199,23 +199,40 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(`Tabel berhasil diekspor ke ${filename}`);
     }
 
-
-    // --- Event Listeners ---
-
-    // HAPUS: Event listener untuk pemilih sumber akun
-    // accountSourceSelector.addEventListener('change', (event) => {
-    //     activeAccountSourceKey = event.target.value;
-    //     saveToLocalStorage();
-    //     loadFromLocalStorage();
-    //     renderTables();
-    //     alert(`Sumber data akun beralih ke: ${activeAccountSourceKey}`);
-    // });
-
     setBalanceBtn.addEventListener('click', () => {
         const balance = parseFloat(initialBalanceInput.value);
+        // NEW: Get the date for the initial balance
+        const initialBalanceDate = transactionDateInput.value;
+
         if (!isNaN(balance) && balance >= 0) {
             initialStartingBalance = balance;
-            transactions = [];
+            transactions = []; // Clear existing transactions
+            // NEW: Add a "Saldo Awal" transaction with the selected date
+            if (initialBalanceDate) {
+                transactions.push({
+                    date: new Date(initialBalanceDate).toLocaleDateString('id-ID'), // Format date
+                    description: 'Saldo Awal',
+                    accountCode: '-',
+                    accountName: '-',
+                    type: '-',
+                    nominal: initialStartingBalance,
+                    penerimaan: initialStartingBalance,
+                    pengeluaran: 0,
+                });
+            } else {
+                 transactions.push({
+                    date: new Date().toLocaleDateString('id-ID'), // Fallback to current date
+                    description: 'Saldo Awal',
+                    accountCode: '-',
+                    accountName: '-',
+                    type: '-',
+                    nominal: initialStartingBalance,
+                    penerimaan: initialStartingBalance,
+                    pengeluaran: 0,
+                });
+            }
+
+
             renderTables();
             saveToLocalStorage();
             alert(`Saldo awal berhasil diatur: Rp ${initialStartingBalance.toLocaleString('id-ID')}`);
@@ -250,14 +267,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedAccount = accountSelect.value;
         const transactionType = transactionTypeSelect.value;
         const nominal = parseFloat(nominalInput.value);
+        // NEW: Get the selected transaction date
+        const transactionDate = transactionDateInput.value;
 
-        if (!description || !selectedAccount || !transactionType || isNaN(nominal) || nominal <= 0) {
-            alert('Mohon lengkapi semua kolom dengan data yang valid.');
+        if (!description || !selectedAccount || !transactionType || isNaN(nominal) || nominal <= 0 || !transactionDate) {
+            alert('Mohon lengkapi semua kolom dengan data yang valid, termasuk tanggal transaksi.');
             return;
         }
 
-        const today = new Date();
-        const date = today.toLocaleDateString('id-ID');
+        // Use the selected date, format it for display
+        const dateForDisplay = new Date(transactionDate).toLocaleDateString('id-ID');
 
         let penerimaan = 0;
         let pengeluaran = 0;
@@ -271,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const [accountCode, accountName] = selectedAccount.split(' - ');
 
         const newTransaction = {
-            date: date,
+            date: dateForDisplay, // Use the selected date
             description: description,
             accountCode: accountCode,
             accountName: accountName,
@@ -293,10 +312,10 @@ document.addEventListener('DOMContentLoaded', () => {
             transactions = [];
             localStorage.removeItem('initialStartingBalance_kaskecil');
             localStorage.removeItem('transactions_kaskecil');
-            localStorage.removeItem(accountStorageKey); // Hapus data akun dari kunci statis
+            localStorage.removeItem(accountStorageKey);
 
-            accounts = [...defaultAccounts]; // Inisialisasi ulang akun dari sumber default tunggal
-            saveToLocalStorage(); // Simpan akun default yang baru diinisialisasi
+            accounts = [...defaultAccounts];
+            saveToLocalStorage();
 
             renderTables();
             clearForm();
@@ -304,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Event listener untuk tombol Export Excel
     if (exportMainTableBtn) {
         exportMainTableBtn.addEventListener('click', () => {
             exportTableToExcel('mainTable', 'Buku_Kas_Harian');
@@ -326,14 +344,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Fungsi Ganti Tampilan Melalui Dropdown ---
     viewSelector.addEventListener('change', () => {
         const selectedView = viewSelector.value;
         mainTableSection.classList.add('hidden');
         recapTableSection.classList.add('hidden');
         accountDetailSection.classList.add('hidden');
 
-        // Sembunyikan semua tombol export secara default
         if (exportMainTableBtn) exportMainTableBtn.classList.add('hidden');
         if (exportRecapTableBtn) exportRecapTableBtn.classList.add('hidden');
         if (exportDetailTableBtn) exportDetailTableBtn.classList.add('hidden');
@@ -354,15 +370,18 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTables();
     });
 
-    // --- Fungsi Render Tabel Utama ---
     function renderMainTable() {
         transactionTableBody.innerHTML = '';
 
         let runningBalance = initialStartingBalance;
 
+        // NEW: Display initial balance row with its stored date
+        const initialBalanceEntry = transactions.find(t => t.description === 'Saldo Awal');
+        const initialBalanceDate = initialBalanceEntry ? initialBalanceEntry.date : new Date().toLocaleDateString('id-ID'); // Fallback
+
         const initialBalanceRow = transactionTableBody.insertRow();
         initialBalanceRow.innerHTML = `
-            <td>${new Date().toLocaleDateString('id-ID')}</td>
+            <td>${initialBalanceDate}</td>
             <td>Saldo Awal</td>
             <td>-</td>
             <td>-</td>
@@ -373,11 +392,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <td>${initialStartingBalance.toLocaleString('id-ID')}</td>
         `;
 
-        if (transactions.length === 0) {
+        const otherTransactions = transactions.filter(t => t.description !== 'Saldo Awal'); // Filter out the initial balance entry for subsequent rendering
+
+        if (otherTransactions.length === 0 && initialStartingBalance === 0) { // Adjust condition
             const noDataRow = transactionTableBody.insertRow();
             noDataRow.innerHTML = `<td colspan="9" style="text-align: center;">Belum ada transaksi lain.</td>`;
         } else {
-            transactions.forEach((transaction) => {
+            // Sort transactions by date (optional, but good for history)
+            otherTransactions.sort((a, b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-'))); // Assumes DD/MM/YYYY
+
+            // Recalculate running balance based on sorted transactions
+            runningBalance = initialStartingBalance; // Reset for recalculation from the initial balance
+
+            otherTransactions.forEach((transaction) => {
                 if (transaction.type === 'D') {
                     runningBalance += transaction.nominal;
                 } else if (transaction.type === 'K') {
@@ -400,7 +427,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Fungsi Generate dan Render Tabel Rekap ---
     function generateRecapTable() {
         recapTableBody.innerHTML = '';
 
@@ -417,7 +443,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let totalOverallPenerimaan = 0;
         let totalOverallPengeluaran = 0;
 
-        transactions.forEach((transaction) => {
+        // Exclude the 'Saldo Awal' entry from recap calculations if it's explicitly added as a transaction
+        const transactionsForRecap = transactions.filter(t => t.description !== 'Saldo Awal');
+
+        transactionsForRecap.forEach((transaction) => {
             const key = `${transaction.accountCode}-${transaction.accountName}`;
             if (!accountRecap[key]) {
                 accountRecap[key] = {
@@ -467,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         let currentOverallBalance = initialStartingBalance;
-        transactions.forEach((transaction) => {
+        transactionsForRecap.forEach((transaction) => { // Use transactionsForRecap here
             if (transaction.type === 'D') {
                 currentOverallBalance += transaction.nominal;
             } else if (transaction.type === 'K') {
@@ -484,7 +513,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    // --- Fungsi Render Tabel Detail Uraian per Akun ---
     function renderAccountDetailTable(accountCodeToFilter) {
         detailTransactionTableBody.innerHTML = '';
 
@@ -494,7 +522,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const filteredTransactions = transactions.filter((t) => t.accountCode === accountCodeToFilter);
+        // Filter out 'Saldo Awal' for detail view as it's not tied to a specific account code
+        const filteredTransactions = transactions.filter((t) => t.accountCode === accountCodeToFilter && t.description !== 'Saldo Awal');
 
         if (filteredTransactions.length === 0) {
             const noDataRow = detailTransactionTableBody.insertRow();
@@ -512,13 +541,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Event Listener untuk detailAccountSelector (Dropdown baru) ---
     detailAccountSelector.addEventListener('change', (event) => {
         const selectedCode = event.target.value;
         renderAccountDetailTable(selectedCode);
     });
 
-    // --- Fungsi Utama untuk Merender Semua Tabel ---
     function renderTables() {
         renderMainTable();
         generateRecapTable();
@@ -529,7 +556,6 @@ document.addEventListener('DOMContentLoaded', () => {
         recapTableSection.classList.add('hidden');
         accountDetailSection.classList.add('hidden');
 
-        // Sembunyikan semua tombol export secara default
         if (exportMainTableBtn) exportMainTableBtn.classList.add('hidden');
         if (exportRecapTableBtn) exportRecapTableBtn.classList.add('hidden');
         if (exportDetailTableBtn) exportDetailTableBtn.classList.add('hidden');
@@ -553,6 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
         accountSelect.value = '';
         transactionTypeSelect.value = '';
         nominalInput.value = '';
+        transactionDateInput.valueAsDate = new Date(); // Set default date to today
         accountSearchInput.value = '';
         detailAccountSearchInput.value = '';
         loadAccountsToSelects();
@@ -570,22 +597,32 @@ document.addEventListener('DOMContentLoaded', () => {
         // Header baris 2: Penerimaan, Pengeluaran, Saldo (di bawah Mutasi Bank Harian)
         mainWsData.push(["", "", "", "", "", "", "Penerimaan", "Pengeluaran", "Saldo"]);
 
-        // Data Saldo Awal
-        let runningBalance = initialStartingBalance;
-        mainWsData.push([
-            new Date().toLocaleDateString('id-ID'),
-            "Saldo Awal",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            initialStartingBalance
-        ]);
+        // Data Saldo Awal (ensure it's the first entry for accurate running balance in Excel)
+        const initialBalanceEntry = transactions.find(t => t.description === 'Saldo Awal');
+        if (initialBalanceEntry) {
+            mainWsData.push([
+                initialBalanceEntry.date,
+                "Saldo Awal",
+                "",
+                "",
+                "",
+                "",
+                initialBalanceEntry.penerimaan, // Use penerimaan for initial balance
+                initialBalanceEntry.pengeluaran,
+                initialStartingBalance
+            ]);
+        }
 
-        // Data Transaksi
-        transactions.forEach((transaction) => {
+
+        let runningBalance = initialStartingBalance;
+
+        // Data Transaksi (filter out the "Saldo Awal" entry as it's handled above)
+        const transactionsForExcel = transactions.filter(t => t.description !== 'Saldo Awal');
+
+        // Sort transactions for Excel export to ensure correct running balance calculation
+        transactionsForExcel.sort((a, b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-')));
+
+        transactionsForExcel.forEach((transaction) => {
             if (transaction.type === 'D') {
                 runningBalance += transaction.nominal;
             } else if (transaction.type === 'K') {
@@ -626,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { wch: 18 }  // Saldo
         ];
 
-        // Format angka sebagai angka di Excel, bukan teks
+        // Format angka sebagai angka di Excel, bukan teks (start from row 2 because of 2 header rows)
         for (let R = 2; R < mainWsData.length; ++R) {
             const nominalCell = XLSX.utils.encode_cell({ r: R, c: 5 });
             const penerimaanCell = XLSX.utils.encode_cell({ r: R, c: 6 });
@@ -659,7 +696,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let totalOverallPenerimaan = 0;
         let totalOverallPengeluaran = 0;
 
-        transactions.forEach((transaction) => {
+        // Exclude 'Saldo Awal' from recap calculation
+        const transactionsForRecapExcel = transactions.filter(t => t.description !== 'Saldo Awal');
+
+        transactionsForRecapExcel.forEach((transaction) => {
             const key = `${transaction.accountCode}-${transaction.accountName}`;
             if (!accountRecap[key]) {
                 accountRecap[key] = {
@@ -701,7 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ]);
 
         let currentOverallBalance = initialStartingBalance;
-        transactions.forEach((transaction) => {
+        transactionsForRecapExcel.forEach((transaction) => { // Use the filtered list for final balance
             if (transaction.type === 'D') {
                 currentOverallBalance += transaction.nominal;
             } else if (transaction.type === 'K') {
@@ -777,5 +817,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Panggil Fungsi Saat Halaman Dimuat ---
     loadFromLocalStorage();
     loadAccountsToSelects();
+    clearForm(); // Set default date on load
     renderTables();
 });
