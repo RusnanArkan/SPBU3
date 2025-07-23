@@ -27,8 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportRecapTableBtn = document.getElementById('exportRecapTableBtn');
     const exportDetailTableBtn = document.getElementById('exportDetailTableBtn');
 
+    // NEW: Reference to the manual date input
+    const transactionDateInput = document.getElementById('transactionDate');
+
     let initialStartingBalance = 0;
     let transactions = [];
+    // NEW: Variable to store the initial balance date
+    let initialBalanceDate = null; // Stores formatted date (DD/MM/YYYY)
+    let initialBalanceRawDate = null; // Stores raw date (YYYY-MM-DD) for sorting
 
     // Data Akun (Kode Akun dan Nama Akun) yang diperbarui
     const accounts = [
@@ -101,18 +107,31 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveToLocalStorage() {
         localStorage.setItem('initialStartingBalance', JSON.stringify(initialStartingBalance));
         localStorage.setItem('transactions', JSON.stringify(transactions));
+        // NEW: Save initialBalanceDate and initialBalanceRawDate
+        localStorage.setItem('initialBalanceDate', JSON.stringify(initialBalanceDate));
+        localStorage.setItem('initialBalanceRawDate', JSON.stringify(initialBalanceRawDate));
         console.log('Data saved to Local Storage.');
     }
 
     function loadFromLocalStorage() {
         const savedInitialBalance = localStorage.getItem('initialStartingBalance');
         const savedTransactions = localStorage.getItem('transactions');
+        // NEW: Load initialBalanceDate and initialBalanceRawDate
+        const savedInitialBalanceDate = localStorage.getItem('initialBalanceDate');
+        const savedInitialBalanceRawDate = localStorage.getItem('initialBalanceRawDate');
 
         if (savedInitialBalance !== null) {
             initialStartingBalance = JSON.parse(savedInitialBalance);
         }
         if (savedTransactions !== null) {
             transactions = JSON.parse(savedTransactions);
+        }
+        // NEW: Parse loaded dates
+        if (savedInitialBalanceDate !== null) {
+            initialBalanceDate = JSON.parse(savedInitialBalanceDate);
+        }
+        if (savedInitialBalanceRawDate !== null) {
+            initialBalanceRawDate = JSON.parse(savedInitialBalanceRawDate);
         }
         console.log('Data loaded from Local Storage.');
     }
@@ -183,14 +202,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setBalanceBtn.addEventListener('click', () => {
         const balance = parseFloat(initialBalanceInput.value);
-        if (!isNaN(balance) && balance >= 0) {
+        // NEW: Get the date from the input for initial balance
+        const initialDate = transactionDateInput.value;
+
+        if (!isNaN(balance) && balance >= 0 && initialDate) {
             initialStartingBalance = balance;
-            transactions = [];
+            transactions = []; // Reset transactions when setting a new initial balance
+
+            // NEW: Store the date for the initial balance
+            const dateParts = initialDate.split('-'); // YYYY-MM-DD
+            initialBalanceDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // DD/MM/YYYY
+            initialBalanceRawDate = initialDate; // YYYY-MM-DD for sorting
+
             renderTables();
             saveToLocalStorage();
-            alert(`Saldo awal berhasil diatur: Rp ${initialStartingBalance.toLocaleString('id-ID')}`);
+            alert(`Saldo awal berhasil diatur: Rp ${initialStartingBalance.toLocaleString('id-ID')} pada tanggal ${initialBalanceDate}`);
         } else {
-            alert('Mohon masukkan saldo awal yang valid (angka positif).');
+            alert('Mohon masukkan saldo awal yang valid (angka positif) dan pilih tanggal untuk saldo awal.');
         }
     });
 
@@ -223,14 +251,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedAccount = accountSelect.value;
         const transactionType = transactionTypeSelect.value;
         const nominal = parseFloat(nominalInput.value);
+        // NEW: Get the date from the input
+        const transactionDate = transactionDateInput.value;
 
-        if (!description || !selectedAccount || !transactionType || isNaN(nominal) || nominal <= 0) {
-            alert('Mohon lengkapi semua kolom dengan data yang valid.');
+        if (!description || !selectedAccount || !transactionType || isNaN(nominal) || nominal <= 0 || !transactionDate) {
+            alert('Mohon lengkapi semua kolom dengan data yang valid, termasuk tanggal transaksi.');
             return;
         }
 
-        const today = new Date();
-        const date = today.toLocaleDateString('id-ID');
+        // Format the date for display (DD/MM/YYYY)
+        const dateParts = transactionDate.split('-'); // YYYY-MM-DD
+        const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+
 
         let penerimaan = 0;
         let pengeluaran = 0;
@@ -244,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const [accountCode, accountName] = selectedAccount.split(' - ');
 
         const newTransaction = {
-            date: date,
+            date: formattedDate, // Use the formatted date
             description: description,
             accountCode: accountCode,
             accountName: accountName,
@@ -252,9 +284,20 @@ document.addEventListener('DOMContentLoaded', () => {
             nominal: nominal,
             penerimaan: penerimaan,
             pengeluaran: pengeluaran,
+            // Store the original date string for proper sorting if needed later
+            rawDate: transactionDate
         };
 
         transactions.push(newTransaction);
+        // Sort transactions by date (optional, but good for chronological order)
+        transactions.sort((a, b) => {
+            // Sort initial balance first if rawDate is null for initial balance
+            if (a.rawDate === null && b.rawDate !== null) return -1;
+            if (a.rawDate !== null && b.rawDate === null) return 1;
+            if (a.rawDate === null && b.rawDate === null) return 0; // Both are initial balance
+            return new Date(a.rawDate) - new Date(b.rawDate);
+        });
+
         renderTables();
         saveToLocalStorage();
         clearForm();
@@ -264,8 +307,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('Apakah Anda yakin ingin menghapus semua data transaksi dan saldo awal? Tindakan ini tidak dapat dibatalkan.')) {
             initialStartingBalance = 0;
             transactions = [];
+            // NEW: Clear initial balance date
+            initialBalanceDate = null;
+            initialBalanceRawDate = null;
+
             localStorage.removeItem('initialStartingBalance');
             localStorage.removeItem('transactions');
+            // NEW: Remove initial balance date from local storage
+            localStorage.removeItem('initialBalanceDate');
+            localStorage.removeItem('initialBalanceRawDate');
+
             renderTables();
             clearForm();
             alert('Semua data berhasil dihapus.');
@@ -331,8 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const initialBalanceRow = transactionTableBody.insertRow();
         initialBalanceRow.innerHTML = `
-            <td>${new Date().toLocaleDateString('id-ID')}</td>
-            <td>Saldo Awal</td>
+            <td>${initialBalanceDate || new Date().toLocaleDateString('id-ID')}</td> <td>Saldo Awal</td>
             <td>-</td>
             <td>-</td>
             <td>-</td>
@@ -342,32 +392,80 @@ document.addEventListener('DOMContentLoaded', () => {
             <td>${initialStartingBalance.toLocaleString('id-ID')}</td>
         `;
 
-        if (transactions.length === 0) {
-            const noDataRow = transactionTableBody.insertRow();
-            noDataRow.innerHTML = `<td colspan="9" style="text-align: center;">Belum ada transaksi lain.</td>`;
-        } else {
-            transactions.forEach(transaction => {
-                if (transaction.type === 'D') {
-                    runningBalance += transaction.nominal;
-                } else if (transaction.type === 'K') {
-                    runningBalance -= transaction.nominal;
+        // Create a temporary array to hold initial balance + transactions for sorting
+        const combinedEntries = [{
+            date: initialBalanceDate || new Date().toLocaleDateString('id-ID'),
+            description: "Saldo Awal",
+            accountCode: "-",
+            accountName: "-",
+            type: "-",
+            nominal: 0,
+            penerimaan: 0,
+            pengeluaran: 0,
+            rawDate: initialBalanceRawDate || new Date().toISOString().split('T')[0] // Use rawDate for sorting
+        }].concat(transactions);
+
+        // Sort combined entries by rawDate
+        combinedEntries.sort((a, b) => {
+            // Treat "Saldo Awal" as the very first entry if its rawDate is null (meaning it's the default current date)
+            if (a.rawDate === null && b.rawDate !== null) return -1;
+            if (a.rawDate !== null && b.rawDate === null) return 1;
+            if (a.rawDate === null && b.rawDate === null) return 0; // Both are initial balance (should only be one)
+
+            // For actual dates, compare them
+            const dateA = new Date(a.rawDate);
+            const dateB = new Date(b.rawDate);
+            return dateA - dateB;
+        });
+
+        // Skip the manually added initialBalanceRow and re-render based on sorted combinedEntries
+        transactionTableBody.innerHTML = ''; // Clear it again after adding the first row
+        
+        combinedEntries.forEach(entry => {
+            if (entry.description === "Saldo Awal") {
+                // This is the initial balance entry, handle it specially
+                runningBalance = initialStartingBalance;
+                const row = transactionTableBody.insertRow();
+                row.innerHTML = `
+                    <td>${entry.date}</td>
+                    <td>${entry.description}</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>${initialStartingBalance.toLocaleString('id-ID')}</td>
+                `;
+            } else {
+                // This is a regular transaction
+                if (entry.type === 'D') {
+                    runningBalance += entry.nominal;
+                } else if (entry.type === 'K') {
+                    runningBalance -= entry.nominal;
                 }
 
                 const row = transactionTableBody.insertRow();
                 row.innerHTML = `
-                    <td>${transaction.date}</td>
-                    <td>${transaction.description}</td>
-                    <td>${transaction.accountCode}</td>
-                    <td>${transaction.accountName}</td>
-                    <td>${transaction.type}</td>
-                    <td>${transaction.nominal.toLocaleString('id-ID')}</td>
-                    <td>${transaction.penerimaan.toLocaleString('id-ID')}</td>
-                    <td>${transaction.pengeluaran.toLocaleString('id-ID')}</td>
+                    <td>${entry.date}</td>
+                    <td>${entry.description}</td>
+                    <td>${entry.accountCode}</td>
+                    <td>${entry.accountName}</td>
+                    <td>${entry.type}</td>
+                    <td>${entry.nominal.toLocaleString('id-ID')}</td>
+                    <td>${entry.penerimaan.toLocaleString('id-ID')}</td>
+                    <td>${entry.pengeluaran.toLocaleString('id-ID')}</td>
                     <td>${runningBalance.toLocaleString('id-ID')}</td>
                 `;
-            });
+            }
+        });
+
+        if (combinedEntries.length === 1 && combinedEntries[0].description === "Saldo Awal") { // Only initial balance exists
+            const noDataRow = transactionTableBody.insertRow();
+            noDataRow.innerHTML = `<td colspan="9" style="text-align: center;">Belum ada transaksi lain.</td>`;
         }
     }
+
 
     // --- Fungsi Generate dan Render Tabel Rekap ---
     function generateRecapTable() {
@@ -524,6 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
         accountSelect.value = '';
         transactionTypeSelect.value = '';
         nominalInput.value = '';
+        transactionDateInput.value = ''; // NEW: Clear the date input
         // Reset kedua input pencarian juga
         accountSearchInput.value = '';
         detailAccountSearchInput.value = '';
@@ -545,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Data Saldo Awal
         let runningBalance = initialStartingBalance;
         mainWsData.push([
-            new Date().toLocaleDateString('id-ID'),
+            initialBalanceDate || new Date().toLocaleDateString('id-ID'), // NEW: Use initialBalanceDate
             "Saldo Awal",
             "", // Dibiarkan kosong karena tidak ada kode/nama akun spesifik untuk saldo awal
             "", // Dibiarkan kosong
